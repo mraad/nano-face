@@ -8,7 +8,6 @@ import secrets
 import shlex
 import subprocess
 import time
-import urllib.error
 import urllib.request
 import webbrowser
 
@@ -51,7 +50,7 @@ def main():
                     health = json.load(response)
                 if health.get("session") == session:
                     break
-            except (OSError, ValueError, urllib.error.URLError):
+            except (OSError, ValueError):
                 pass
             time.sleep(0.5)
         else:

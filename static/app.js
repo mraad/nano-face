@@ -5,6 +5,7 @@ const capture = document.createElement("canvas");
 const captureCtx = capture.getContext("2d");
 let stream = null, generation = 0, request = null;
 let ready = false, frames = 0, startedAt = 0;
+const HIDDEN = "Camera paused because this tab was hidden. Start again when ready.";
 
 function status(message) { $("status").textContent = message; }
 function resetMetrics() {
@@ -25,7 +26,9 @@ function stop(message = "Camera stopped. No frames are being sent.") {
 }
 
 function render(result) {
-  view.width = capture.width; view.height = capture.height;
+  if (view.width !== capture.width || view.height !== capture.height) {
+    view.width = capture.width; view.height = capture.height;
+  }
   ctx.save();
   if ($("mirror").checked) { ctx.translate(view.width, 0); ctx.scale(-1, 1); }
   ctx.drawImage(capture, 0, 0);
@@ -62,17 +65,13 @@ async function tick(run) {
     const blob = await new Promise((resolve) => capture.toBlob(resolve, "image/jpeg", 0.8));
     if (run !== generation) return;
     if (!blob) throw new Error("Could not encode the camera frame");
-    const controller = new AbortController();
-    request = controller;
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    let result;
-    try {
-      const response = await fetch("/api/detect", {
-        method: "POST", headers: {"Content-Type": "image/jpeg"}, body: blob, signal: controller.signal
-      });
-      result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Nano detection failed");
-    } finally { clearTimeout(timeout); }
+    request = new AbortController();
+    const response = await fetch("/api/detect", {
+      method: "POST", headers: {"Content-Type": "image/jpeg"}, body: blob,
+      signal: AbortSignal.any([request.signal, AbortSignal.timeout(5000)])
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Nano detection failed");
     if (run !== generation) return;
     if (result.width !== capture.width || result.height !== capture.height) {
       throw new Error("Frame size mismatch; restart the camera");
@@ -93,7 +92,7 @@ async function tick(run) {
     setTimeout(() => tick(run), Math.max(0, 50 - (performance.now() - began)));
   } catch (error) {
     if (run !== generation) return;
-    stop(error.name === "AbortError" ? "Nano timed out. Check the USB cable and launcher, then restart the camera." : error.message);
+    stop(error.name === "TimeoutError" ? "Nano timed out. Check the USB cable and launcher, then restart the camera." : error.message);
   }
 }
 
@@ -111,7 +110,7 @@ async function start() {
     });
     if (run !== generation || document.hidden) {
       acquired.getTracks().forEach((track) => track.stop());
-      if (run === generation) stop("Camera paused because this tab was hidden. Start again when ready.");
+      if (run === generation) stop(HIDDEN);
       return;
     }
     stream = acquired; video.srcObject = stream;
@@ -146,7 +145,7 @@ $("start").addEventListener("click", start);
 $("stop").addEventListener("click", () => stop());
 window.addEventListener("pagehide", () => stop());
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden && !$("stop").disabled) stop("Camera paused because this tab was hidden. Start again when ready.");
+  if (document.hidden && !$("stop").disabled) stop(HIDDEN);
 });
 
 async function health() {

@@ -78,9 +78,7 @@ class Detector:
 class Handler(BaseHTTPRequestHandler):
     # HTTP/1.0 deliberately closes each request: rejected bodies cannot become
     # a subsequent request. Browser backpressure limits request frequency.
-    def setup(self):
-        super().setup()
-        self.connection.settimeout(5)
+    timeout = 5
 
     def log_message(self, *args):
         pass  # Do not log per-frame requests or camera data.

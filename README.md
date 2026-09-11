@@ -2,6 +2,8 @@
 
 A local browser app captures the Mac camera, sends JPEG frames to the Jetson Orin Nano Super over USB SSH, and displays each captured frame with face boxes, confidence scores, and five facial landmarks returned by the Nano. The browser performs no face inference. No cloud service, account, Docker container, microphone, or recording is used.
 
+![Nano Face in Chrome: one detected face with box, 92% confidence label, and five landmarks; sidebar shows 16.9 fps, 18 ms Nano inference, 121 ms round trip](NanoFace.png)
+
 ## Start
 
 Post-upgrade verification (September 11, 2026): USB SSH, application deployment,
