@@ -4,9 +4,9 @@ A local browser app captures the Mac camera, sends JPEG frames to the Jetson Ori
 
 ## Start
 
-Post-upgrade note (September 10, 2026): the Nano upgrade and face tests passed.
-The Mac USB network link currently needs a physical reconnect; see
-[NANO.md](NANO.md#usb) for status and working Ethernet/Wi-Fi SSH addresses.
+Post-upgrade verification (September 11, 2026): USB SSH, application deployment,
+and the Nano detector health endpoint passed. The application was subsequently
+stopped at the user's request; run the launcher below to start it again.
 
 Connect the Nano's USB-C data port to the Mac and power it with its DC adapter. From the Mac:
 
@@ -179,3 +179,8 @@ requests over an SSH tunnel (Mac Wi-Fi to Nano Ethernet) also passed: median
 inference 16.1 ms and round trip 33.6 ms. This validates the HTTP detection
 path; it is not a new live-camera or USB benchmark. Private validation logs
 are excluded from Git.
+
+On September 11, the normal launcher successfully deployed and started the
+application over USB SSH, and the Mac health request confirmed the Nano
+backend. Stopping the launcher removed the Nano face-server process and the
+Mac port-8765 listener. Camera capture was not re-benchmarked during this check.

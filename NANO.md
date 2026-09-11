@@ -1,6 +1,7 @@
 # Jetson Orin Nano Super setup and maintenance
 
-Verified September 10, 2026 (EDT; the Nano clock reports September 11 UTC).
+Upgrade verified September 10, 2026 EDT; USB application launch and shutdown
+verified September 11, 2026.
 This is the Orin Nano Super, serial **<nano-serial>**, not the separate AGX Orin.
 
 ## Current system
@@ -65,12 +66,20 @@ The Nano's USB bridge is `192.168.55.1/24`. Power the developer kit using its
 DC barrel adapter; USB-C provides data. See NVIDIA's
 [hardware guide](https://docs.nvidia.com/jetson/orin-nano-devkit/user-guide/latest/hardware_layout.html).
 
-**Post-upgrade USB status:** the Mac detects the correct USB serial and the
-Nano USB service runs, but macOS reports the network link inactive. Refreshing
-the Mac service and Nano gadget did not restore SSH. A physical unplug/replug
-at the Mac has been requested; post-upgrade USB SSH is not yet verified.
-Ethernet and Wi-Fi SSH work. Large USB backup transfers also stalled before
-the upgrade, so Ethernet is the preferred maintenance transport.
+**USB verified September 11, 2026:** `python3 launch.py --no-browser`
+connected through the default `nano` alias, identified the Orin Nano Super,
+deployed the application, and started its detector and SSH tunnel. The Mac's
+`http://127.0.0.1:8765/api/health` returned `nano-face` on
+`<nano-hostname>`, YuNet 2023mar, OpenCV CPU, and OpenCV 4.8.0.
+This confirms that USB SSH recovered after the earlier inactive-link state.
+
+The application was then stopped at the user's request. Checks confirmed no
+matching Nano server process and no Mac listener on port 8765. To use it
+again, run the launcher and click **Start camera** in the browser. This launch
+check did not establish a new live-camera benchmark.
+
+Large USB backup transfers stalled before the upgrade; Ethernet remains the
+preferred transport for large maintenance transfers.
 
 The generic NVIDIA USB ID `0955:7020` does not distinguish this Nano from the
 AGX. The separate HostKeyAlias preserves their separate trust records, but
@@ -155,8 +164,8 @@ cd ~/GWorkspace/nano-face
 python3 launch.py
 ```
 
-The default launcher uses USB through `nano`; its normal launch requires the
-USB link described above. The application architecture and assets remain in
+The default launcher uses the verified USB connection through `nano`. The
+application architecture and assets remain in
 this repository; no face-project assets were added to the former Mac folder.
 
 After the upgrade, all **six face-server tests passed on the Nano**, including
