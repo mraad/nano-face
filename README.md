@@ -4,6 +4,10 @@ A local browser app captures the Mac camera, sends JPEG frames to the Jetson Ori
 
 ## Start
 
+Post-upgrade note (September 10, 2026): the Nano upgrade and face tests passed.
+The Mac USB network link currently needs a physical reconnect; see
+[NANO.md](NANO.md#usb) for status and working Ethernet/Wi-Fi SSH addresses.
+
 Connect the Nano's USB-C data port to the Mac and power it with its DC adapter. From the Mac:
 
 ```bash
@@ -30,9 +34,9 @@ python3 launch.py --host nano
 ## Requirements and verified device
 
 - Mac: Python 3, OpenSSH (`ssh` and `scp`), and a browser supporting `getUserMedia` and canvas JPEG encoding. No Python packages or Node build step are needed on the Mac.
-- Nano: Python 3, NumPy, and OpenCV **4.8 or newer with `FaceDetectorYN`**. The verified Nano already supplies Python 3.10.12, NumPy 1.21.5, and NVIDIA's OpenCV 4.8.0. The implementation deliberately uses the 2023 YuNet model compatible with OpenCV 4.x.
+- Nano: Python 3, NumPy, and OpenCV **4.8 or newer with `FaceDetectorYN`**. The verified Nano already supplies Python 3.12.3, NumPy 1.26.4, and NVIDIA's OpenCV 4.8.0. The implementation deliberately uses the 2023 YuNet model compatible with OpenCV 4.x.
 - USB SSH: `nano` resolves to `<user>@192.168.55.1` with `HostKeyAlias jetson-orin-nano-<nano-serial>`. Passwordless key authentication is required by the launcher. No sudo is needed to run detection.
-- [NANO.md](NANO.md) documents Ubuntu 22.04.5 / L4T 36.4.7, the EVO SSD, and the complete connection setup. This application targets the Nano, not the separate AGX Orin.
+- [NANO.md](NANO.md) documents Ubuntu 24.04.4 / JetPack 7.2.1 / L4T 39.2.1, the EVO SSD, and the complete connection setup. This application targets the Nano, not the separate AGX Orin.
 
 ## Where each step runs
 
@@ -166,3 +170,12 @@ The test letterboxes that image into a non-square frame to exercise coordinate m
 - [MDN: localhost secure contexts](https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Secure_Contexts)
 
 Assistant-run local shell commands in this workspace use the required `rtk` prefix; commands shown here are ordinary interactive terminal commands.
+
+## JetPack 7.2.1 hardware revalidation
+
+After upgrading to Ubuntu 24.04.4 / L4T 39.2.1, all six tests passed on the Nano
+with Python 3.12.3, NumPy 1.26.4, and OpenCV 4.8.0. Ten public-image detection
+requests over an SSH tunnel (Mac Wi-Fi to Nano Ethernet) also passed: median
+inference 16.1 ms and round trip 33.6 ms. This validates the HTTP detection
+path; it is not a new live-camera or USB benchmark. Private validation logs
+are excluded from Git.

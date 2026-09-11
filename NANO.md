@@ -1,36 +1,52 @@
 # Jetson Orin Nano Super setup and maintenance
 
-Last verified September 10, 2026, including a reboot after headless service cleanup. This is a separate device from the Jetson AGX Orin. Addresses and resource usage are observations, not guarantees.
+Verified September 10, 2026 (EDT; the Nano clock reports September 11 UTC).
+This is the Orin Nano Super, serial **<nano-serial>**, not the separate AGX Orin.
 
 ## Current system
 
 | Item | Verified value |
 | --- | --- |
-| Hardware | NVIDIA Jetson Orin Nano Engineering Reference Developer Kit Super |
-| RAM | 8 GB nominal; Linux reports 7.4 GiB |
-| Hostname / user | `<nano-hostname>` / `<user>` |
-| OS | Ubuntu 22.04.5 LTS, NVIDIA L4T 36.4.7 |
-| Kernel | `5.15.148-tegra` |
-| Boot target | `multi-user.target` (headless) |
-| Power mode | `MAXN_SUPER`, mode 2; unchanged during cleanup |
-| System drive | Samsung SSD 990 EVO Plus 2TB NVMe |
-| Mac SSH alias | `nano` |
-| Nano USB address | `192.168.55.1` |
-| Mac USB address | `192.168.55.100`, observed on `en14` |
-| USB serial number | `<nano-serial>` |
-| USB identity | NVIDIA Linux for Tegra, `0955:7020` |
-| USB serial console | `/dev/cu.usbmodem<nano-serial>3` |
-| Authentication | Passwordless SSH and passwordless sudo verified |
+| Hardware | NVIDIA Jetson Orin Nano Engineering Reference Developer Kit Super, P3767-0005 |
+| User / hostname | `<user>` / `<nano-hostname>` |
+| OS | Ubuntu 24.04.4 LTS |
+| NVIDIA release | JetPack **7.2.1**, L4T **39.2.1** |
+| Kernel | `6.8.12-1021-tegra` |
+| Runtime package | `nvidia-jetpack-runtime 7.2.1-b49` |
+| CUDA runtime / TensorRT | `cuda-cudart-13-2 13.2.86-1` / `10.16.2.10-1+cuda13.2` |
+| GPU driver | NVIDIA 595.78; `nvidia-smi` detects Orin |
+| Python / NumPy / OpenCV | 3.12.3 / 1.26.4 / 4.8.0, with `FaceDetectorYN` |
+| Bootloader | Both slots verified running 39.2.1; final current/active slot A, both normal, capsule status 1 |
+| Boot target / power | `multi-user.target` / `MAXN_SUPER`, mode 2 |
+| Memory / swap | Approximately 7.3 GiB RAM / 32 GiB SSD swapfile |
+| Disk | Samsung SSD 990 EVO Plus 2TB NVMe |
+| Access | Passwordless SSH and `sudo -n` verified |
 
-## Connect from the Mac
+The runtime installation is not the full developer SDK. Old Python virtual
+environments, CUDA applications, and containers may need rebuilding for
+Ubuntu 24.04 and CUDA 13.2. Preserved files alone do not establish compatibility.
 
-Power the Nano through its DC barrel adapter and connect its USB-C data port to the Mac. The USB-C connection provides data, not power for the developer kit. NVIDIA documents the port in its [Orin Nano hardware guide](https://docs.nvidia.com/jetson/orin-nano-devkit/user-guide/latest/hardware_layout.html).
+## Connections from the Mac
+
+The verified wired connection is:
 
 ```bash
-ssh nano
+ssh -o HostName=<nano-lan-ip> nano
 ```
 
-The Mac's effective SSH configuration is:
+Ethernet negotiated 1 Gbit/s full duplex on `enP8p1s0`, MAC
+`4c:bb:47:32:eb:e4`. The Mac reaches this LAN through its own Wi-Fi.
+The Nano also connects to **<wifi-ssid>** at `<nano-wifi-ip>` on `wlP1p1s0`:
+
+```bash
+ssh -o HostName=<nano-wifi-ip> nano
+```
+
+These are observed DHCP addresses, not reservations. Wi-Fi power saving is on.
+
+### USB
+
+The normal Mac SSH alias remains:
 
 ```sshconfig
 Host nano
@@ -40,118 +56,182 @@ Host nano
     IdentitiesOnly yes
 ```
 
-Without the alias:
-
 ```bash
-ssh -o HostKeyAlias=jetson-orin-nano-<nano-serial> <user>@192.168.55.1
+ssh nano
 ```
 
-The USB device was identified by unplugging only the Nano: serial `<nano-serial>` disappeared and returned when reconnected. The generic `0955:7020` ID alone does not distinguish it from the AGX. SSH subsequently confirmed the Nano Super board model.
+The Mac's **Linux for Tegra** service uses static `192.168.55.100/24` on `en14`.
+The Nano's USB bridge is `192.168.55.1/24`. Power the developer kit using its
+DC barrel adapter; USB-C provides data. See NVIDIA's
+[hardware guide](https://docs.nvidia.com/jetson/orin-nano-devkit/user-guide/latest/hardware_layout.html).
 
-The Mac already had a different host key saved for `192.168.55.1`. The Nano's separate `HostKeyAlias` preserves that record. It separates SSH trust records, but does not resolve routing conflicts if two Jetsons expose the same USB subnet; connect one at a time when using this address. The AGX's documented `jetson` alias uses Ethernet instead.
+**Post-upgrade USB status:** the Mac detects the correct USB serial and the
+Nano USB service runs, but macOS reports the network link inactive. Refreshing
+the Mac service and Nano gadget did not restore SSH. A physical unplug/replug
+at the Mac has been requested; post-upgrade USB SSH is not yet verified.
+Ethernet and Wi-Fi SSH work. Large USB backup transfers also stalled before
+the upgrade, so Ethernet is the preferred maintenance transport.
 
-The user enabled passwordless sudo for `<user>`. Verification used `sudo -n -k whoami`, which returned `root` without using cached sudo credentials. No passwords or private keys are stored here.
+The generic NVIDIA USB ID `0955:7020` does not distinguish this Nano from the
+AGX. The separate HostKeyAlias preserves their separate trust records, but
+cannot resolve two devices exposing the same USB subnet simultaneously.
+The AGX's `jetson` alias and installation were not modified.
+
+Cloud-init regenerated SSH host keys on first boot. After verifying the Nano's
+wired MAC, USB serial, and running board identity, the original host keys were
+restored from the verified configuration backup. They survived subsequent
+reboots. The original ED25519 fingerprint is:
+
+```text
+SHA256:qt9F+IW7ewbW0HS2FJs0ZF2J7jK/XsuMbOHOGYfw+Gs
+```
 
 ## EVO SSD usage
 
-The EVO is the Nano's main system drive, not a separate data mount. No microSD card was detected.
+The EVO is the main system disk, not a separate data card. No microSD was
+detected. `/dev/nvme0n1p1` is the ext4 root filesystem; `/home` and `/var`
+already use the SSD. The other partitions contain EFI, NVIDIA kernel,
+recovery, and alternate boot components. No repartitioning was performed.
 
-| Partition | Purpose |
-| --- | --- |
-| `/dev/nvme0n1p1` | ext4 root filesystem at `/`; label in partition table: `APP` |
-| `/dev/nvme0n1p10` | FAT EFI partition at `/boot/efi` |
-| Other NVMe partitions | NVIDIA kernel, device-tree, recovery, alternate-slot, and reserved partitions |
+After the upgrade, root reports **1.8 TiB total, 121 GiB used, and 1.6 TiB
+available**. The 32 GiB `/swapfile` is active with no pages in use at the check.
+First boot created a 2 GiB swapfile and a duplicate fstab entry; the original
+32 GiB size was restored and only the duplicate entry removed. The prior
+fstab is `/etc/fstab.before-nano-swap-repair`.
 
-The root filesystem had approximately **136 GiB used (8%) and 1.6 TiB available**. `/home` and `/var` each used about 37 GiB, `/usr` 29 GiB, and `/opt` 1.4 GiB. The active `/swapfile` occupies 32 GiB on the SSD and had no pages in use at the checks.
+The unused `noauto` `/ssd` entry references UUID
+`cdf497ff-fcc7-4be8-a4fa-acfda74c3d93`, which is absent from detected devices.
+It remains unchanged. Save models and datasets under `/home/<user>` to
+use the available space without creating another mount.
 
-Files saved under `/home/<user>` already use the SSD; no repartitioning or data migration is required. The suggested `models`, `datasets`, `recordings`, and `results` directories were not created during this work.
+## Headless operation and jtop
 
-`/etc/fstab` also contains a `noauto` entry for `/ssd` referencing UUID `cdf497ff-fcc7-4be8-a4fa-acfda74c3d93`. That UUID was absent from the detected partitions, and `/ssd` was not a separate mount. The actual root UUID is `f03e3796-b4be-44b4-9e7e-ef70474f4cc3`. The unused fstab entry was left unchanged.
+The Nano boots to `multi-user.target`; GDM is masked. Docker, its socket, and
+containerd are stopped and disabled at boot. Docker is installed; no running
+containers were present when it was stopped. Ollama is not installed in the
+new image. Existing home, containerd, and archived Docker data were preserved.
 
-## Headless service cleanup
+SSH, NetworkManager, NVIDIA compute services, automatic fan control, and USB
+device mode remain active. The final service check reports **zero failed
+units**. MAXN_SUPER required NVIDIA's `nvpmodel -m 2 --force` reboot to rebuild
+the GPU context; the subsequent boot and power service passed.
 
-The Nano already used `multi-user.target`. No packages were removed, and no power-mode change was made.
+jtop is installed in `/opt/jetson-stats` with `/usr/local/bin/jtop` pointing to
+its executable. The package environment was made readable/traversable after
+the image build left root-only directory permissions. Its release table has
+the exact `39.2.1` → `7.2.1` mapping; this is backed by the installed OS version.
+Both the API and actual terminal dashboard display **JetPack 7.2.1 / L4T
+39.2.1**, without `NOT DETECTED`, and provide live telemetry.
 
-Disabled at boot and verified inactive after reboot:
-
-| Units | Result |
-| --- | --- |
-| `nvmemwarning.service`, `nvweston.service` | Desktop memory notifications and compositor startup disabled |
-| `kerneloops.service`, `lpd.service` | Kernel crash reporter and unused printer spooler stopped |
-| `jtop.service` | Optional monitoring starts manually |
-| `docker.service`, `docker.socket`, `containerd.service` | Container runtime starts manually; no containers were present |
-| `ollama.service` | Model server starts manually |
-
-Masked only in **<user>'s user service manager**: `pulseaudio.service`, `pulseaudio.socket`, `pipewire.service`, `pipewire.socket`, and `pipewire-media-session.service`. These desktop audio services cannot reactivate until unmasked.
-
-SSH, USB device mode and its serial console, NetworkManager/Wi-Fi, DNS, time synchronization, NVIDIA compute services, automatic fan control, package/security maintenance, and SSD TRIM were retained. A broader batch affecting package, account, and device services was rejected by automatic approval review and was never applied; the actual changes above passed review separately.
-
-Observed RAM use was about **508 MiB before cleanup**, **429 MiB before reboot**, and **355 MiB shortly after reboot**. These are snapshots with different cache/uptime conditions, not a controlled benchmark. Post-reboot available RAM was approximately 6.9 GiB, swap usage was zero, and both system and user service managers reported no failed units. USB SSH, passwordless sudo, Wi-Fi, and fan control were verified after reboot.
-
-### Start tools when needed
-
-Run on the Nano:
+jtop starts manually and was left running for inspection:
 
 ```bash
-sudo systemctl start docker
-sudo systemctl start ollama
 sudo systemctl start jtop
 jtop
+# Stop monitoring when finished:
+sudo systemctl stop jtop
 ```
 
-Start only the tools needed. Starting Docker also starts its socket and containerd. Docker's NVIDIA runtime registration and Ollama's `/api/version` response (0.21.2) were verified before stopping both again; GPU inference was not benchmarked.
+The runtime-only installation may leave jtop's CUDA toolkit or OpenCV library
+summary blank; the actual runtime packages, OpenCV import, and GPU driver
+were checked separately. JetPack detection is verified.
 
-To release their resources again:
+Start Docker only when needed with `sudo systemctl start docker`. Stop it
+with `sudo systemctl stop docker.service docker.socket containerd.service`.
+GPU container inference and old application environments were not validated.
 
-```bash
-sudo systemctl stop docker.service docker.socket containerd.service
-sudo systemctl stop ollama.service jtop.service
-```
-
-### Rollback
-
-The Nano holds original configuration archives, complete before/after unit-file states, and instructions in:
-
-```text
-/home/<user>/headless-backup.4rYskn/
-```
-
-Read `README.txt` there before restoring. To restore the original system service boot enablement:
-
-```bash
-sudo systemctl enable nvmemwarning nvweston jtop kerneloops lpd docker ollama
-sudo systemctl start nvmemwarning jtop kerneloops lpd docker ollama
-```
-
-`nvweston` was enabled but inactive before cleanup; the command above restores its startup setting without starting it immediately. Docker's socket and containerd were originally disabled independently and started through Docker's dependencies.
-
-Restore desktop audio as `<user>`:
-
-```bash
-systemctl --user unmask pulseaudio.service pulseaudio.socket pipewire.service pipewire.socket pipewire-media-session.service
-systemctl --user start pulseaudio.socket pipewire.socket pipewire-media-session.service
-```
+The original headless cleanup archive is preserved in
+`/home/<user>/headless-backup.4rYskn/`. Its rollback instructions describe
+the old Ubuntu 22.04 installation; do not apply them blindly to the new OS.
 
 ## Mac camera face detection
 
-[Nano Face](README.md) uses the Mac's browser camera and sends JPEG frames over the USB SSH connection to a YuNet detector on this Nano. The browser renders returned boxes and landmarks on matching frames. Detection runs on the Nano's CPU; the live test reached about 19.7 fps at 640×480 capture, with sampled 13–19 ms inference and 27–43 ms frame round trips.
-
-Start from the Mac:
+[Nano Face](README.md) captures camera frames in the Mac browser, sends JPEGs
+through SSH, runs YuNet on the Nano's CPU, and draws returned boxes and five
+landmarks on the matching frame. No identity recognition or recording is used.
 
 ```bash
-python3 /Users/mraad/GWorkspace/nano-face/launch.py
+cd ~/GWorkspace/nano-face
+python3 launch.py
 ```
 
-Open `http://127.0.0.1:8765` and click **Start camera**. The launcher deploys to `~/nano-face` and starts an on-demand detector through SSH; Ctrl+C stops it and the tunnel. No boot service is installed, no sudo is needed, and the app does not record frames or identify people. See the linked guide for architecture, model provenance, API, testing, and troubleshooting.
+The default launcher uses USB through `nano`; its normal launch requires the
+USB link described above. The application architecture and assets remain in
+this repository; no face-project assets were added to the former Mac folder.
+
+After the upgrade, all **six face-server tests passed on the Nano**, including
+real-face detection, coordinate scaling, blank frames, request boundaries,
+and busy-detector rejection. Ten public-image HTTP requests through an SSH
+tunnel also passed, from Mac Wi-Fi to Nano Ethernet: median inference
+**16.1 ms**, median round trip **33.6 ms**. These are fixture measurements,
+not a new live-camera frame-rate benchmark. The earlier live-camera test on
+JetPack 6.2.1 reached about 19.7 fps; see README for that historical result.
+
+## Upgrade and backup record
+
+NVIDIA lists [JetPack 7.2.1](https://developer.nvidia.com/embedded/jetpack/downloads)
+as the current release. The upgrade used NVIDIA's
+[image-based OTA procedure](https://docs.nvidia.com/jetson/archives/r39.2/DeveloperGuide/SD/SoftwarePackagesAndTheUpdateMechanism.html#updating-jetson-linux-with-image-based-over-the-air-update)
+from R36.4.7, followed by a bootloader-only R39 update for the second chain.
+It did not mix R39 packages into Ubuntu 22.04 or use `do-release-upgrade`.
+
+1. With explicit user approval, created and verified a full file-level backup
+   on the Mac plus separate configuration/EFI backups.
+2. Built an isolated headless R39.2.1 image and both OTA payloads in the
+   Parallels VM at `/home/parallels/nano-upgrade-r39.2.1/`, targeting only
+   `jetson-orin-nano-devkit-super`, P3767-0005, NVMe. Payload SHA-256 checks
+   passed after transfers.
+3. The first recovery run reached preservation compression. A blank display
+   and missing networking were initially mistaken for a stalled boot; that
+   diagnosis was premature. Esc opened UEFI, and changing L4T Boot Mode from
+   Recovery Partition to ExtLinux restored the original OS.
+4. Validated the 401,972-entry preservation tar, compressed it on the running
+   OS with `pigz`, and verified its gzip integrity. The resulting archive was
+   51,818,673,521 bytes. The full independent Mac backup remained intact.
+5. Retried with wired recovery SSH through NVIDIA's custom OTA task hook,
+   using the original host keys and existing authorized key, with password
+   login disabled. Image and preservation checks passed. The updater
+   extracted the new OS and restored saved data.
+6. Verbose restore output was throttled by the recovery serial console,
+   including timestamp warnings because recovery's clock began in 1970.
+   A temporary Python helper used Linux
+   [TIOCCONS](https://man7.org/linux/man-pages/man2/TIOCCONS.2const.html) to
+   redirect and drain console output while retaining the complete OTA file
+   log. Its self-check passed and it restored the console when tar exited.
+7. The full update booted slot B at 39.2.1. The bootloader-only payload then
+   booted slot A at 39.2.1, proving both chains were updated. Subsequent power,
+   service, SSH, jtop, and face tests passed as recorded above.
+
+Payloads and staging logs remain at `/ota-nano-upgrade-20260910/` on the Nano.
+Successful recovery logs are in `/last_ota_update_log/`. NVIDIA cleaned its
+temporary `/ota_work` archives after success.
+
+The private Mac backup and validation records are in:
+
+```text
+/Users/mraad/GWorkspace/nano-face/.local/jetpack-upgrade-20260910/
+```
+
+This mode-0700 directory is Git-ignored and contains credentials/private data.
+Do not commit it. `nano-rootfs.tar.gz` is **78,739,572,901 bytes**, SHA-256:
+
+```text
+0396541e61f8c79a3429fd2cccf2e880b8638fc45e3d6e21ee03b4dbd01e263f
+```
+
+SHA-256, gzip CRC, and tar validation passed: 642,827 entries and
+109,817,418,126 logical bytes. This is a file backup excluding swap and virtual
+filesystems, not a raw NVMe/firmware clone. Restore with Linux GNU tar and
+appropriate ownership, ACL, and xattr handling; consult the private README.
 
 ## Maintenance checks
 
 ```bash
-ssh nano 'systemctl get-default; systemctl --failed --no-pager'
-ssh nano 'systemctl is-active ssh nv-l4t-usb-device-mode nvfancontrol NetworkManager'
-ssh nano 'free -h; df -h /; swapon --show'
-ssh nano 'sudo -n nvpmodel -q'
-ssh nano 'sudo -n reboot'
+ssh -o HostName=<nano-lan-ip> nano 'head -n 1 /etc/nv_tegra_release; uname -r'
+ssh -o HostName=<nano-lan-ip> nano 'sudo -n nvbootctrl dump-slots-info'
+ssh -o HostName=<nano-lan-ip> nano 'systemctl --failed --no-pager; free -h; df -h /'
+ssh -o HostName=<nano-lan-ip> nano 'sudo -n nvpmodel -q; swapon --show'
 ```
 
-The last reboot returned to USB SSH in roughly one minute. The commands above are for an interactive terminal; assistant-run local shell commands in this Mac workspace require the `rtk` prefix.
+Assistant-run local shell commands in this Mac workspace require the `rtk`
+prefix; the examples above are for an interactive terminal.
