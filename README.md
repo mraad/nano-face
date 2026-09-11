@@ -17,7 +17,7 @@ cd ~/GWorkspace/nano-face
 python3 launch.py
 ```
 
-The launcher checks that `ssh nano` identifies an **Orin Nano**, deploys the app into `/home/<user>/nano-face`, starts the detector, opens an SSH tunnel, and opens **http://127.0.0.1:8765** in your default browser. Leave the terminal running. Click **Start camera**, grant camera access, and face the camera. Camera selection becomes available after the first permission grant; stop before selecting another camera. Browser camera permissions and macOS permissions may both be required.
+The launcher checks that the SSH host identifies a **Jetson** (Orin Nano by default, or the AGX Orin with `--host jetson-usb`), deploys the app into `/home/<user>/nano-face`, starts the detector, opens an SSH tunnel, and opens **http://127.0.0.1:8765** in your default browser. Leave the terminal running. Click **Start camera**, grant camera access, and face the camera. Camera selection becomes available after the first permission grant; stop before selecting another camera. Browser camera permissions and macOS permissions may both be required.
 
 Alternatively, double-click **[Launch Nano Face.command](Launch%20Nano%20Face.command)** in Finder. It runs the same launcher in Terminal.
 
@@ -29,16 +29,18 @@ Options:
 python3 launch.py --no-browser
 python3 launch.py --port 8766
 python3 launch.py --host nano
+python3 launch.py --host jetson-usb   # AGX Orin over USB
 ```
 
-`--port` changes both endpoints of the tunnel. Only use the SSH alias of the Nano; the launcher rejects a different board. A dropped SSH connection ends the session; reconnect USB and rerun the launcher, then start the camera again.
+`--port` changes both endpoints of the tunnel. `--host` must be an SSH alias of a Jetson; the launcher rejects anything whose device-tree model is not `NVIDIA Jetson`. A dropped SSH connection ends the session; reconnect USB and rerun the launcher, then start the camera again.
 
 ## Requirements and verified device
 
 - Mac: Python 3, OpenSSH (`ssh` and `scp`), and a browser supporting `getUserMedia` and canvas JPEG encoding. No Python packages or Node build step are needed on the Mac.
 - Nano: Python 3, NumPy, and OpenCV **4.8 or newer with `FaceDetectorYN`**. The verified Nano already supplies Python 3.12.3, NumPy 1.26.4, and NVIDIA's OpenCV 4.8.0. The implementation deliberately uses the 2023 YuNet model compatible with OpenCV 4.x.
 - USB SSH: `nano` resolves to `<user>@192.168.55.1` with `HostKeyAlias jetson-orin-nano-<nano-serial>`. Passwordless key authentication is required by the launcher. No sudo is needed to run detection.
-- [NANO.md](NANO.md) documents Ubuntu 24.04.4 / JetPack 7.2.1 / L4T 39.2.1, the EVO SSD, and the complete connection setup. This application targets the Nano, not the separate AGX Orin.
+- [NANO.md](NANO.md) documents Ubuntu 24.04.4 / JetPack 7.2.1 / L4T 39.2.1, the EVO SSD, and the complete connection setup.
+- AGX Orin: also supported, via `--host jetson-usb`. [AGX.md](AGX.md) records its setup: JetPack 7 / L4T 39.2.1 ships no Python OpenCV, so the pip `opencv-python-headless` 4.11 wheel is installed in `~/.local`, and NVIDIA's USB device-mode script needed a one-line fix (applied) before the Mac's NCM link comes up. Never plug both Jetsons into the Mac at once; both use `192.168.55.1`.
 
 ## Where each step runs
 
@@ -161,7 +163,7 @@ The test letterboxes that image into a non-square frame to exercise coordinate m
 - **No face:** improve lighting, face the camera, and move to a moderate distance. Small, obscured, or sharply rotated faces may be missed. Confidence is a detector score, not an identity probability.
 - **Slow updates:** check Nano load, reduce competing workloads, and inspect the displayed inference/round-trip times. The cap is 20 fps, not a guaranteed minimum.
 - **Model checksum error:** redeploy the original bundled model. Do not replace it with a Git LFS pointer text file or an unverified model.
-- **OpenCV missing:** use the Nano's system `/usr/bin/python3`, which was verified with OpenCV 4.8.0. A fresh virtual environment may hide NVIDIA's system packages. Do not blindly replace NVIDIA's OpenCV with a pip wheel.
+- **OpenCV missing:** use the board's system `/usr/bin/python3`. The Nano was verified with NVIDIA's OpenCV 4.8.0; do not replace it with a pip wheel. The AGX has no NVIDIA OpenCV and uses the pip headless wheel in `~/.local` (see [AGX.md](AGX.md)). A fresh virtual environment hides both.
 - **After unplug/replug or reboot:** rerun the launcher. No background auto-start service is installed.
 
 ## References
@@ -186,3 +188,13 @@ On September 11, the normal launcher successfully deployed and started the
 application over USB SSH, and the Mac health request confirmed the Nano
 backend. Stopping the launcher removed the Nano face-server process and the
 Mac port-8765 listener. Camera capture was not re-benchmarked during this check.
+
+## AGX Orin validation — September 11, 2026
+
+`python3 launch.py --host jetson-usb --no-browser` deployed to the AGX Orin
+Developer Kit over USB (`192.168.55.1`), and health reported `opencv 4.11.0`
+with the session ID matched. All six tests passed on the AGX, including the
+positive-face case with the OpenCV `lena.jpg` sample at `/tmp/nano-face-test.jpg`.
+Five detection requests through the USB tunnel returned one face each:
+inference 12.9–16.0 ms, round trip 24–28 ms. Live camera capture in the
+browser was not exercised in this check.

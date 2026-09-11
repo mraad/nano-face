@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Mac browser captures camera frames → JPEG over a USB SSH tunnel → Jetson Orin Nano runs YuNet (OpenCV CPU) → JSON boxes/landmarks drawn back on the same captured frame. No cloud, no recording, no identity recognition. Three pieces, no build step, no Mac Python dependencies:
+Mac browser captures camera frames → JPEG over a USB SSH tunnel → Jetson (Orin Nano or AGX Orin) runs YuNet (OpenCV CPU) → JSON boxes/landmarks drawn back on the same captured frame. No cloud, no recording, no identity recognition. Three pieces, no build step, no Mac Python dependencies:
 
 - `launch.py` — Mac orchestrator: board check, `scp` deploy, `ssh -L` tunnel, health wait, browser open, cleanup.
 - `server.py` — Nano loopback-only HTTP server: static allowlist, `/api/health`, `/api/detect`, YuNet inference.
 - `static/` — browser UI (`app.js`, `index.html`, `style.css`): `getUserMedia`, capture loop, rendering.
 
-`README.md` is the user-facing spec (API table, detection pipeline, verified results). `NANO.md` is the hardware/OS record for the board (JetPack 7.2.1, SSH aliases, upgrade log). Read both before changing behavior they document; update their dated "verified" sections when re-validating.
+`README.md` is the user-facing spec (API table, detection pipeline, verified results). `NANO.md` is the hardware/OS record for the Orin Nano (JetPack 7.2.1, SSH aliases, upgrade log); `AGX.md` is the same for the AGX Orin (pip OpenCV, USB bridge fix). Read both before changing behavior they document; update their dated "verified" sections when re-validating.
 
 ## Commands
 
@@ -20,10 +20,11 @@ Run from the Mac:
 python3 launch.py                 # deploy to Nano, tunnel, open http://127.0.0.1:8765
 python3 launch.py --no-browser    # same without opening the browser
 python3 launch.py --port 8766     # changes both tunnel ends
+python3 launch.py --host jetson-usb   # AGX Orin over USB instead of the Nano
 python3 -m py_compile launch.py server.py test_server.py && node --check static/app.js
 ```
 
-Tests need OpenCV with `FaceDetectorYN`, which the Mac does not have (`cv2` is not installed here). Run them on the Nano after a deploy:
+Tests need OpenCV with `FaceDetectorYN`, which the Mac does not have (`cv2` is not installed here). Run them on the board after a deploy (`ssh jetson-usb` for the AGX):
 
 ```bash
 ssh nano 'cd ~/nano-face && python3 -m unittest -v test_server'
@@ -31,7 +32,7 @@ ssh nano 'cd ~/nano-face && python3 -m unittest -v test_server.DetectorHTTPTests
 ssh nano 'cd ~/nano-face && FACE_TEST_IMAGE=/tmp/face.jpg python3 -m unittest -v test_server'   # positive-face case, otherwise skipped
 ```
 
-`launch.py` deploys `test_server.py` too, so a plain launch (Ctrl+C after health) is enough to refresh the Nano copy. Use the Nano's system `/usr/bin/python3` (NVIDIA OpenCV 4.8.0); a venv hides it.
+`launch.py` deploys `test_server.py` too, so a plain launch (Ctrl+C after health) is enough to refresh the Nano copy. Use the board's system `/usr/bin/python3`: Nano has NVIDIA OpenCV 4.8.0, AGX has the pip `opencv-python-headless` 4.11 wheel in `~/.local`; a venv hides both.
 
 ## Architecture invariants
 
@@ -46,10 +47,10 @@ These are enforced by code and tests; changing one usually means changing severa
 - **Trust boundary is loopback.** Server binds `127.0.0.1`; `Host` must be `127.0.0.1:<port>`/`localhost:<port>`; POST requires a matching `Origin`; HTTP/1.0 closes per request so rejected bodies can't be replayed as a new request; body ≤ 1 MB, decoded frame ≤ 1280×720 (also capped via `OPENCV_IO_MAX_*` env before `import cv2`).
 - **Coordinates map back to the submitted frame.** Server resizes longest side to 320, runs YuNet, rescales X and Y independently, clips boxes. Browser checks `result.width/height === capture.width/height` and draws on the exact captured canvas, not a live preview. Mirroring transforms frame and geometry together; labels are drawn outside the mirror transform.
 - **Browser `generation` counter** invalidates every async continuation after `stop()`; any new async path in `app.js` must re-check `run !== generation` after each await.
-- **Launcher refuses other boards.** `/proc/device-tree/model` must contain `NVIDIA Jetson Orin Nano`. The AGX Orin (`jetson` alias) is a separate device; do not target it.
+- **Launcher refuses non-Jetson hosts.** `/proc/device-tree/model` must contain `NVIDIA Jetson`. Known boards: Orin Nano (`nano`) and AGX Orin (`jetson` over Ethernet, `jetson-usb` over USB). Both use `192.168.55.1` on USB, so never plug both in at once.
 
 ## Board facts that matter for code
 
-- Nano: Python 3.12.3, NumPy 1.26.4, OpenCV 4.8.0 (NVIDIA build, CPU backend deliberately — no CUDA/TensorRT claims). Mac: Python 3.14, stdlib only.
-- SSH alias `nano` → `<user>@192.168.55.1` over USB, passwordless key. `NANO.md` lists Ethernet/Wi-Fi alternatives via `-o HostName=...`.
+- Nano: Python 3.12.3, NumPy 1.26.4, OpenCV 4.8.0 (NVIDIA build, CPU backend deliberately — no CUDA/TensorRT claims). AGX: Python 3.12.3, NumPy 1.26.4, OpenCV 4.11.0 (pip headless, no NVIDIA cv2 on JetPack 7 R39.2.1). Mac: Python 3.14, stdlib only.
+- SSH aliases: `nano` (Orin Nano), `jetson` (AGX, Ethernet <agx-lan-ip>), `jetson-usb` (AGX, USB 192.168.55.1, own `HostKeyAlias`). All `<user>`, passwordless key. `NANO.md` lists Ethernet/Wi-Fi alternatives via `-o HostName=...`.
 - `.local/` is git-ignored, mode 0700, holds private backups and credentials. Never commit or read into context unless asked.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deploy to the Nano, open a USB SSH tunnel, and launch the Mac camera UI."""
+"""Deploy to a Jetson (Orin Nano or AGX Orin), open a USB SSH tunnel, and launch the Mac camera UI."""
 
 import argparse
 import json
@@ -26,8 +26,8 @@ def main():
     if not 1024 <= args.port <= 65535 or args.host.startswith("-"):
         parser.error("Use a non-option SSH host and a port between 1024 and 65535")
     model = subprocess.check_output(SSH + [args.host, "cat /proc/device-tree/model"], text=True)
-    if "NVIDIA Jetson Orin Nano" not in model:
-        raise SystemExit(f"Refusing to deploy to a different board: {model!r}")
+    if "NVIDIA Jetson" not in model:
+        raise SystemExit(f"Refusing to deploy to a non-Jetson board: {model!r}")
     print(f"Deploying to {model.strip(chr(0))}", flush=True)
     subprocess.run(SSH + [args.host, "mkdir -p ~/nano-face"], check=True)
     subprocess.run(["scp", "-q", "-r", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",

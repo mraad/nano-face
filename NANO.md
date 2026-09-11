@@ -1,7 +1,8 @@
 # Jetson Orin Nano Super setup and maintenance
 
 Upgrade verified September 10, 2026 EDT; USB application launch and shutdown
-verified September 11, 2026.
+verified September 11, 2026; apt security update and headless prune completed
+September 11, 2026 (see [Headless prune](#headless-prune-september-11-2026)).
 This is the Orin Nano Super, serial **<nano-serial>**, not the separate AGX Orin.
 
 ## Current system
@@ -20,7 +21,8 @@ This is the Orin Nano Super, serial **<nano-serial>**, not the separate AGX Orin
 | Bootloader | Both slots verified running 39.2.1; final current/active slot A, both normal, capsule status 1 |
 | Boot target / power | `multi-user.target` / `MAXN_SUPER`, mode 2 |
 | Memory / swap | Approximately 7.3 GiB RAM / 32 GiB SSD swapfile |
-| Disk | Samsung SSD 990 EVO Plus 2TB NVMe |
+| Disk | Samsung SSD 990 EVO Plus 2TB NVMe; 79 GiB used after the prune |
+| Packages | 1,187 installed; no desktop, snapd, cloud-init, or Docker |
 | Access | Passwordless SSH and `sudo -n` verified |
 
 The runtime installation is not the full developer SDK. Old Python virtual
@@ -115,10 +117,9 @@ use the available space without creating another mount.
 
 ## Headless operation and jtop
 
-The Nano boots to `multi-user.target`; GDM is masked. Docker, its socket, and
-containerd are stopped and disabled at boot. Docker is installed; no running
-containers were present when it was stopped. Ollama is not installed in the
-new image. Existing home, containerd, and archived Docker data were preserved.
+The Nano boots to `multi-user.target`. GDM, GNOME, Xorg, and Docker are no
+longer installed (see the prune section). Ollama is not installed in the
+new image. Home directories were preserved.
 
 SSH, NetworkManager, NVIDIA compute services, automatic fan control, and USB
 device mode remain active. The final service check reports **zero failed
@@ -145,9 +146,13 @@ The runtime-only installation may leave jtop's CUDA toolkit or OpenCV library
 summary blank; the actual runtime packages, OpenCV import, and GPU driver
 were checked separately. JetPack detection is verified.
 
-Start Docker only when needed with `sudo systemctl start docker`. Stop it
-with `sudo systemctl stop docker.service docker.socket containerd.service`.
-GPU container inference and old application environments were not validated.
+Docker Engine and its 33 GiB of preserved containerd data were removed on
+September 11, 2026. `nvidia-container` (the NVIDIA container toolkit) remains
+installed because `nvidia-jetpack-runtime` depends on it; its
+`nvidia-cdi-refresh` path/service units are disabled because they raced the
+GPU driver at boot and serve no purpose without a container engine. To use
+containers again: `sudo apt install docker-ce` from the Docker repository,
+then `sudo systemctl enable --now nvidia-cdi-refresh.path`.
 
 The original headless cleanup archive is preserved in
 `/home/<user>/headless-backup.4rYskn/`. Its rollback instructions describe
@@ -211,8 +216,9 @@ It did not mix R39 packages into Ubuntu 22.04 or use `do-release-upgrade`.
    booted slot A at 39.2.1, proving both chains were updated. Subsequent power,
    service, SSH, jtop, and face tests passed as recorded above.
 
-Payloads and staging logs remain at `/ota-nano-upgrade-20260910/` on the Nano.
-Successful recovery logs are in `/last_ota_update_log/`. NVIDIA cleaned its
+The 6.4 GiB payload directory `/ota-nano-upgrade-20260910/` was deleted on
+September 11, 2026; payloads are rebuildable in the Parallels VM. Successful
+recovery logs remain in `/last_ota_update_log/`. NVIDIA cleaned its
 temporary `/ota_work` archives after success.
 
 The private Mac backup and validation records are in:
@@ -232,6 +238,39 @@ SHA-256, gzip CRC, and tar validation passed: 642,827 entries and
 109,817,418,126 logical bytes. This is a file backup excluding swap and virtual
 filesystems, not a raw NVMe/firmware clone. Restore with Linux GNU tar and
 appropriate ownership, ACL, and xattr handling; consult the private README.
+
+## Headless prune (September 11, 2026)
+
+`apt-get upgrade` applied 271 packages (233 from `noble-security`); no NVIDIA
+package changed because the L4T repository is pinned to `r39.2`. Then
+`apt-get purge` and a guarded `autoremove --purge` removed 891 packages and
+freed about 42 GiB in total:
+
+- Desktop stack: `ubuntu-desktop`, GDM, GNOME Shell and apps, Xorg, Wayland,
+  Mutter, LibreOffice, fonts, ibus, CUPS and printer drivers, PipeWire,
+  Bluetooth, ModemManager, fwupd, snapd, apport, cloud-init, plymouth, sssd,
+  avahi, ubiquity.
+- NVIDIA GUI-only packages: `nvidia-l4t-graphics-demos`, `nvidia-l4t-weston`,
+  `nvidia-l4t-vulkan-sc-{samples,sdk,dev}`, `nvidia-l4t-jetsonpower-gui-tools`,
+  and the `nvidia-l4t-bsp` metapackage that depends on them. Every other
+  `nvidia-l4t-*`, CUDA, TensorRT, cuDNN, VPI, and NVIDIA OpenCV package was
+  first marked manually installed so `autoremove` cannot touch it.
+- Docker Engine, `openvpn`, `iperf3`, `/var/lib/containerd` (33 GiB),
+  `/var/lib/docker`, `/ota-nano-upgrade-20260910` (6.4 GiB), apt cache.
+- Kept deliberately: NetworkManager, netplan, `wpasupplicant`, OpenSSH,
+  `usbutils`, `lsof`, `jq`, `zip`/`unzip`, `grub-common`, `secureboot-db`,
+  `python3-{apt,requests,yaml,serial,paramiko,systemd}`, polkit, and all of
+  `/home/<user>`.
+
+Post-reboot: `multi-user.target`, `systemctl is-system-running` reports
+`running` with zero failed units, 83 enabled units, USB `l4tbr0` at
+192.168.55.1, Ethernet and Wi-Fi connected through NetworkManager,
+`nvidia-smi` shows Orin with driver 595.78, MAXN_SUPER mode 2, swap active,
+jtop present, `/usr/bin/python3` imports OpenCV 4.8.0 with `FaceDetectorYN`
+and NumPy 1.26.4. All six face-server tests passed with the re-downloaded
+public fixture, and a Mac USB launch returned one face at 0.868 confidence in
+16.4 ms inference through the tunnel. Private apt and prune logs are in
+`.local/` on the Mac.
 
 ## Maintenance checks
 
